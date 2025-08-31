@@ -1,194 +1,112 @@
-import { Client, GatewayIntentBits, Partials, PermissionsBitField } from "discord.js";
-
-const TOKEN = process.env.TOKEN;
-const OWNER_ID = process.env.OWNER_ID || "1268018033268621455";
-
-if (!TOKEN) {
-  console.error("❌ حط TOKEN في Environment");
-  process.exit(1);
-}
-
+const { Client, GatewayIntentBits, PermissionsBitField } = require("discord.js");
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,        // للأوامر الإدارية
-    GatewayIntentBits.GuildMessages,       // قراءة الرسائل
-    GatewayIntentBits.MessageContent,      // بدون بريفكس
-    GatewayIntentBits.GuildVoiceStates     // ميوت/ديفن/تايم أوت صوت
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
   ],
-  partials: [Partials.Message, Partials.Channel, Partials.User, Partials.GuildMember]
 });
 
-function isMod(member) {
-  return member?.id === OWNER_ID || member?.permissions?.has(PermissionsBitField.Flags.Administrator);
-}
+const prefix = ""; // بدون بريفكس
 
-function getMentionedMember(message) {
-  return message.mentions.members.first() || null;
-}
-
-async function ensureMutedRole(guild) {
-  let role = guild.roles.cache.find(r => r.name === "Muted");
-  if (!role) {
-    role = await guild.roles.create({ name: "Muted", reason: "Text mute role", hoist: false });
-    // امنع الكتابة والتكلم لكل القنوات
-    for (const [, ch] of guild.channels.cache) {
-      await ch.permissionOverwrites.edit(role, {
-        SendMessages: false,
-        AddReactions: false,
-        Speak: false
-      }).catch(() => {});
-    }
-  }
-  return role;
-}
-
-client.once("ready", () => {
+client.on("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
-// لوج أغلاق الجيتواي للتشخيص
-client.ws.on("close", (code, reason) => {
-  console.error("Gateway closed:", code, reason?.toString?.() || "");
-});
-
+// ✅ ردود خاصة
 client.on("messageCreate", async (message) => {
-  if (!message.guild || message.author.bot) return;
+  if (message.author.bot) return;
 
-  const member = await message.guild.members.fetch(message.author.id).catch(() => null);
-  if (!member || !isMod(member)) return; // بس الأدمن/الأونر
-
-  const content = message.content.trim();
-  const args = content.split(/\s+/);
-  const cmd = args[0].toLowerCase();
-  const mentioned = getMentionedMember(message);
-
-  // ======== مسح الرسائل ========
-  if (cmd === "مسح" || cmd === "clear") {
-    const amount = parseInt(args[1], 10);
-    if (!amount || amount < 1 || amount > 100) return message.reply("اكتب عدد بين 1 و 100 مثل: `مسح 50`");
-    const deleted = await message.channel.bulkDelete(amount, true).catch(() => null);
-    const m = await message.channel.send(`🧹 تم مسح ${deleted ? deleted.size : amount} رسالة.`);
-    setTimeout(() => m.delete().catch(()=>{}), 3000);
-    return;
+  if (message.content.includes("برجلي")) {
+    return message.reply("✅ تسلم رجلك ههههههههههههههههههههههههههههههههههههههههههههههههههههههههه");
   }
 
-  // ======== قفل/فتح وإخفاء/إظهار ========
-  if (["قفل","lock"].includes(cmd)) {
-    await message.channel.permissionOverwrites.edit(message.guild.id, { SendMessages: false }).catch(()=>{});
-    return void message.channel.send("🔒 تم قفل القناة.");
-  }
-  if (["فتح","unlock"].includes(cmd)) {
-    await message.channel.permissionOverwrites.edit(message.guild.id, { SendMessages: true }).catch(()=>{});
-    return void message.channel.send("🔓 تم فتح القناة.");
-  }
-  if (["اخفاء","hide"].includes(cmd)) {
-    await message.channel.permissionOverwrites.edit(message.guild.id, { ViewChannel: false }).catch(()=>{});
-    return void message.channel.send("🙈 تم إخفاء القناة.");
-  }
-  if (["اظهار","إظهار","show"].includes(cmd)) {
-    await message.channel.permissionOverwrites.edit(message.guild.id, { ViewChannel: true }).catch(()=>{});
-    return void message.channel.send("👀 تم إظهار القناة.");
+  if (message.content.includes("تفو")) {
+    return message.reply("✅ يقطع أم الزحف ههههههههههههههههههههههههههههههههههههههههههههههههههههههههه");
   }
 
-  // ======== BAN / KICK ========
-  if ((cmd === "باند" || cmd === "ban") && mentioned) {
-    await mentioned.ban({ reason: `By ${member.user.tag}` }).catch(()=>{});
-    await message.react("✅").catch(()=>{});
-    return void message.channel.send(`⛔ ${mentioned.user.tag} تم حظره.`);
-  }
-  if ((cmd === "طرد" || cmd === "kick") && mentioned) {
-    await mentioned.kick(`By ${member.user.tag}`).catch(()=>{});
-    return void message.channel.send(`👢 ${mentioned.user.tag} تم طرده.`);
+  // ✅ أوامر إدارية رسمية
+  if (message.content.startsWith("باند") || message.content.startsWith("ban")) {
+    const member = message.mentions.members.first();
+    if (!member) return message.reply("مين تبند؟");
+    await member.ban().catch(err => message.reply("ما قدرت أبند"));
+    return message.reply("✅ تم تبنيد العضو.");
   }
 
-  // ======== UNBAN ALL ========
-  if (cmd === "unbanall" || cmd === "فك-كل-الباند") {
-    const bans = await message.guild.bans.fetch().catch(()=>null);
-    if (!bans) return void message.channel.send("ما قدرت أجيب قائمة المبندين.");
-    let count = 0;
-    for (const [, ban] of bans) {
-      await message.guild.members.unban(ban.user.id).catch(()=>{});
-      count++;
-    }
-    return void message.channel.send(`🔓 تم فك الحظر عن ${count} عضو.`);
+  if (message.content.startsWith("انباند") || message.content.startsWith("unban")) {
+    const args = message.content.split(" ");
+    const id = args[1];
+    if (!id) return message.reply("حط آيدي العضو");
+    await message.guild.members.unban(id).catch(err => message.reply("ما قدرت افك الباند"));
+    return message.reply("✅ تم فك الباند عن العضو.");
   }
 
-  // ======== Funny BAN (برجلي / تفو) ========
-  if (cmd === "برجلي" && mentioned) {
-    await mentioned.ban({ reason: `Funny ban by ${member.user.tag}` }).catch(()=>{});
-    await message.react("✅").catch(()=>{});
-    return void message.channel.send("تسلم رجلك هههههههههههههههههههههههههههههههههههههههههههههههههههههههههه");
-  }
-  if (cmd === "تفو" && mentioned) {
-    await mentioned.ban({ reason: `Funny ban by ${member.user.tag}` }).catch(()=>{});
-    await message.react("✅").catch(()=>{});
-    return void message.channel.send("يقطع ام الزححف هههههههههههههههههههههههههههههههههههههههههههههههههههههههههه");
+  if (message.content.startsWith("unban all")) {
+    const bans = await message.guild.bans.fetch();
+    bans.forEach(async (ban) => {
+      await message.guild.members.unban(ban.user.id);
+    });
+    return message.reply("✅ تم فك الباند عن الجميع.");
   }
 
-  // ======== ميوت/فك ميوت صوت (server voice) ========
-  if ((cmd === "كتم" || cmd === "mute") && mentioned) {
-    await mentioned.voice.setMute(true).catch(()=>{});
-    return void message.channel.send(`🔇 ${mentioned.user.tag} تم كتمه صوتيًا.`);
-  }
-  if ((cmd === "فك" || cmd === "unmute") && mentioned) {
-    await mentioned.voice.setMute(false).catch(()=>{});
-    return void message.channel.send(`🔊 ${mentioned.user.tag} تم فك الميوت الصوتي.`);
+  if (message.content.startsWith("كتم") || message.content.startsWith("mute")) {
+    const member = message.mentions.members.first();
+    if (!member) return message.reply("مين تكتم؟");
+    await member.timeout(60 * 60 * 1000).catch(err => message.reply("ما قدرت أكتم"));
+    return message.reply("✅ تم كتم العضو ساعة.");
   }
 
-  // ======== ديفن/فك الديفن ========
-  if ((cmd === "ديفن" || cmd === "deafen") && mentioned) {
-    await mentioned.voice.setDeaf(true).catch(()=>{});
-    return void message.channel.send(`🙉 ${mentioned.user.tag} تم عمل ديفن.`);
-  }
-  if ((cmd === "فك-الديفن" || cmd === "undeafen") && mentioned) {
-    await mentioned.voice.setDeaf(false).catch(()=>{});
-    return void message.channel.send(`👂 ${mentioned.user.tag} تم فك الديفن.`);
+  if (message.content.startsWith("تايم اوت") || message.content.startsWith("timeout")) {
+    const member = message.mentions.members.first();
+    if (!member) return message.reply("مين تسوي له تايم اوت؟");
+    await member.timeout(10 * 60 * 1000).catch(err => message.reply("ما قدرت اسوي تايم اوت"));
+    return message.reply("✅ تم إعطاء العضو تايم اوت 10 دقايق.");
   }
 
-  // ======== Timeout / Un-timeout ========
-  if ((cmd === "تايم" || cmd === "timeout") && mentioned) {
-    // مثال: "تايم اوت @عضو 10" أو "timeout @member 10"
-    const minutes = parseInt(args[2] || args[1], 10) || 10;
-    const ms = minutes * 60 * 1000;
-    await mentioned.timeout(ms, `By ${member.user.tag}`).catch(()=>{});
-    return void message.channel.send(`⏰ ${mentioned.user.tag} تايم أوت ${minutes} دقيقة.`);
-  }
-  if ((cmd === "إلغاء" || cmd === "untimeout" || cmd === "cancel-timeout") && mentioned) {
-    await mentioned.timeout(null).catch(()=>{});
-    return void message.channel.send(`✅ ${mentioned.user.tag} تم إلغاء التايم أوت.`);
+  if (message.content.startsWith("طرد") || message.content.startsWith("kick")) {
+    const member = message.mentions.members.first();
+    if (!member) return message.reply("مين تطرد؟");
+    await member.kick().catch(err => message.reply("ما قدرت أطرد"));
+    return message.reply("✅ تم طرد العضو.");
   }
 
-  // ======== ميوت كتابي (القناة الحالية) ========
-  if ((cmd === "ميوت-كتابي" || cmd === "textmute") && mentioned) {
-    await message.channel.permissionOverwrites.edit(mentioned.id, { SendMessages: false }).catch(()=>{});
-    return void message.channel.send(`✏️ ${mentioned.user.tag} تم منعه من الكتابة هنا.`);
-  }
-  if ((cmd === "فك-الميوت-كتابي" || cmd === "untextmute") && mentioned) {
-    await message.channel.permissionOverwrites.edit(mentioned.id, { SendMessages: true }).catch(()=>{});
-    return void message.channel.send(`✅ ${mentioned.user.tag} يقدر يكتب الآن.`);
+  if (message.content.startsWith("مسح") || message.content.startsWith("clear")) {
+    const args = message.content.split(" ");
+    const amount = parseInt(args[1]);
+    if (!amount || isNaN(amount)) return message.reply("حط عدد الرسائل");
+    await message.channel.bulkDelete(amount, true).catch(err => message.reply("ما قدرت أمسح"));
+    return message.reply(`✅ تم مسح ${amount} رسائل.`);
   }
 
-  // ======== ميوت كتابي عام (Role Muted لكل السيرفر) ========
-  if ((cmd === "ميوت-عام" || cmd === "globalmute") && mentioned) {
-    const role = await ensureMutedRole(message.guild);
-    await mentioned.roles.add(role).catch(()=>{});
-    return void message.channel.send(`🚫 ${mentioned.user.tag} تم منعه من الكتابة والتكلم بالسيرفر.`);
-  }
-  if ((cmd === "فك-الميوت-عام" || cmd === "unglobalmute") && mentioned) {
-    const role = message.guild.roles.cache.find(r => r.name === "Muted");
-    if (role && mentioned.roles.cache.has(role.id)) {
-      await mentioned.roles.remove(role).catch(()=>{});
-    }
-    return void message.channel.send(`✅ ${mentioned.user.tag} تم فك الميوت العام.`);
+  if (message.content.startsWith("اخفاء")) {
+    await message.channel.permissionOverwrites.edit(message.guild.id, { ViewChannel: false });
+    return message.reply("✅ تم إخفاء الشات.");
   }
 
-  // ======== EN Aliases quick ========
-  if (cmd === "lock")  { await message.channel.permissionOverwrites.edit(message.guild.id, { SendMessages: false }); return void message.channel.send("🔒 Channel locked."); }
-  if (cmd === "unlock"){ await message.channel.permissionOverwrites.edit(message.guild.id, { SendMessages: true  }); return void message.channel.send("🔓 Channel unlocked."); }
-  if (cmd === "hide")  { await message.channel.permissionOverwrites.edit(message.guild.id, { ViewChannel: false }); return void message.channel.send("🙈 Channel hidden."); }
-  if (cmd === "show")  { await message.channel.permissionOverwrites.edit(message.guild.id, { ViewChannel: true  }); return void message.channel.send("👀 Channel shown."); }
+  if (message.content.startsWith("اظهار")) {
+    await message.channel.permissionOverwrites.edit(message.guild.id, { ViewChannel: true });
+    return message.reply("✅ تم إظهار الشات.");
+  }
 
+  if (message.content.startsWith("قفل")) {
+    await message.channel.permissionOverwrites.edit(message.guild.id, { SendMessages: false });
+    return message.reply("✅ تم قفل الشات.");
+  }
+
+  if (message.content.startsWith("فتح")) {
+    await message.channel.permissionOverwrites.edit(message.guild.id, { SendMessages: true });
+    return message.reply("✅ تم فتح الشات.");
+  }
+
+  if (message.content.startsWith("ديفن") || message.content.startsWith("deafen")) {
+    const member = message.mentions.members.first();
+    if (!member || !member.voice.channel) return message.reply("العضو مو بالروم");
+    await member.voice.setDeaf(true).catch(err => message.reply("ما قدرت اسوي ديفن"));
+    return message.reply("✅ تم عمل ديفن للعضو.");
+  }
 });
 
-client.login(TOKEN);
+// ✅ شغل البوت
+client.login("توكن_البوت");
